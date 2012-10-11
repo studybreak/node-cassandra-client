@@ -5,11 +5,12 @@
     "Gary Dusbabek <gdusbabek@gmail.com>",
     "Tomaž Muraus <tomaz@tomaz.me>",
     "Patrick Negri <patrick@iugu.com.br>",
-    "Christoph Tavan <dev@tavan.de>"
+    "Christoph Tavan <dev@tavan.de>",
+    "Allan Carroll <allanca@gmail.com>"
   ],
   "name": "cassandra-client",
   "description": "Node.js CQL driver for Apache Cassandra",
-  "version": "0.9.0",
+  "version": "0.9.5",
   "homepage": "http://code.google.com/a/apache-extras.org/p/cassandra-node/",
   "repository": {
     "type": "git",
@@ -20,7 +21,7 @@
     "lib": "lib"
   },
   "scripts": {
-    "test": "whiskey --tests \"test/test_driver.js test/test_decoder.js test/test_uuid.js\" --dependencies test/dependencies.json --scope-leaks --timeout 30000"
+    "test": "./scripts/test.sh"
   },
   "engines": {
     "node": ">= 0.6.7"
