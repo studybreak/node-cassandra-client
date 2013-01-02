@@ -1,3 +1,51 @@
+Changes with cassandra-client 0.13.0
+
+- Fix a bug when an invalid parameter passed to PooledConnection.execute method
+  would cause connection pool to invalidly be exhausted instead of passing error
+  directly back to the user.
+
+- Fix a bug with incorrectly waiting for a query timeout instead of imediatelly
+  calling 'Connection.execute' callback if an 'error' event was emitted on a
+  Thrift connection.
+
+Changes with cassandra-client 0.12.0
+
+- Remove concept of a 'taken' connection and allow the same Thrift connection to
+  be used to execute multiple queries at the same time.
+  Thrift client supports request multiplexing which means marking connection as
+  'taken' when a query is executing is not necessary.
+
+- Rename 'max_query' Connection / PooledConnection option to 'query_timeout'.
+  Also decrease default 'query_timeout' from 100 seconds to a more sane value of
+  5 seconds.
+
+- Properly propagate 'query_timeout' setting to a ConnectionInPool class inside
+  a PooledConnection class.
+
+Changes with cassandra-client in 0.11.0
+
+- Changes to support cassandra 1.1.
+
+  Mainly changes related to using binary strings instead of Buffer objects.
+  Regenerated Thrift client.
+  Still compatible with Cassandra 1.0.x.
+  No CQ3 yet.
+
+Changes with cassandra-client in 0.10.0
+
+- Pass 'metadata' object as a third and last argument to the
+  {Connection,PooledConnection}.execute callback.
+
+  Note: This change might break some of the existing code (e.g. if you use
+  connection.execute directly in async.waterfall chain) because previously
+  execute callback took two arguments and now it takes three.
+
+Changes with cassandra-client in 0.9.6
+
+- Add metadata.connectionInfo attribute to the 'rows' object passed to the
+  {Connection,PooledConnection}.execute callback. This object contains host and
+  port of the Cassandra host where the query was actually executed.
+
 Changes with cassandra-client in 0.9.5
 
 - fix exception thrown with undefinded query parameters [Simon Gaeremynck]

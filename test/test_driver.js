@@ -53,7 +53,7 @@ function merge(a, b) {
     }
   }
   return c;
-};
+}
 
 function stringToHex(s) {
   var buf = '';
@@ -130,9 +130,9 @@ exports.setUp = function(test, assert) {
       var cfCounter = new CfDef({keyspace: ksName, name: 'CfCounter', column_type: 'Standard', comparator_type: 'AsciiType', default_validation_class: 'CounterColumnType', key_validation_class: 'AsciiType'});
       var super1 = new CfDef({keyspace: ksName, name: 'Super1', column_type: 'Super', comparator_type: 'UTF8Type', subcomparator_type: 'UTF8Type'});
       var cfReversed = new CfDef({keyspace: ksName, name: 'CfReversed1', column_type: 'Standard', comparator_type: 'UTF8Type(reversed=true)', default_validation_class: 'UTF8Type', key_validation_class: 'UTF8Type'});
-      var keyspace1 = new KsDef({name: ksName, 
+      var keyspace1 = new KsDef({name: ksName,
                                  strategy_class: 'org.apache.cassandra.locator.SimpleStrategy',
-                                 strategy_options: {'replication_factor': '1'}, 
+                                 strategy_options: {'replication_factor': '1'},
                                  cf_defs: [standard1, super1, cfInt, cfUtf8, cfLong, cfBytes, cfBoolean, cfDate, cfUuid, cfUgly, cfCounter, cfReversed]});
       sys.addKeyspace(keyspace1, function(addErr) {
         console.log(addErr);
@@ -205,8 +205,9 @@ exports.testSelectCount = function(test, assert) {
 
     function executeCountQuery(_con, callback) {
       con = _con;
-      con.execute('SELECT COUNT(*) FROM CfLong', [], function(err, rows) {
+      con.execute('SELECT COUNT(*) FROM CfLong', [], function(err, rows, metadata) {
         assert.ifError(err);
+        assert.ok(metadata.connectionInfo);
         assert.equal(rows[0].cols[0].value, 0);
         callback();
       });
@@ -219,12 +220,13 @@ exports.testSelectCount = function(test, assert) {
     },
 
     function executeCountQuery(callback) {
-      con.execute('SELECT COUNT(*) FROM CfLong', [], function(err, rows) {
+      con.execute('SELECT COUNT(*) FROM CfLong', [], function(err, rows, metadata) {
         assert.ifError(err);
+        assert.ok(metadata.connectionInfo);
         assert.strictEqual(rows[0].cols[0].value, 5);
         callback();
       });
-    },
+    }
   ],
 
   function(err) {
@@ -276,7 +278,7 @@ exports.testConnectToBadUrl = function(test, assert) {
 exports.testConnectionKeyspaceDoesNotExistConnect = function(test, assert) {
   connect({keyspace: 'doesnotexist.'}, function(err, conn) {
     assert.ok(err);
-    assert.equal(err.name, 'NotFoundException')
+    assert.equal(err.name, 'NotFoundException');
     assert.equal(err.message, 'ColumnFamily or Keyspace does not exist');
     assert.ok(!conn);
     test.finish();
@@ -290,7 +292,7 @@ exports.testPooledConnectionKeyspaceDoesNotExistConnect = function(test, assert)
   con.execute('SELECT * FROM foo', [], function(err) {
     assert.ok(err);
     assert.equal(err.message, 'ColumnFamily or Keyspace does not exist');
-    assert.equal(err.name, 'NotFoundException')
+    assert.equal(err.name, 'NotFoundException');
     test.finish();
   });
 };
@@ -315,7 +317,7 @@ exports.testCounterUpdate = function(test, assert) {
                                     test.finish();
                                   } else {
                                     con.close();
-                                    assert.strictEqual(res1[0].colHash['a'].toString(), '3');
+                                    assert.strictEqual(res1[0].colHash.a.toString(), '3');
                                     test.finish();
                                   }
                                 });
@@ -472,7 +474,7 @@ exports.testBoolean = function(test, assert) {
   connect(function(err, con) {
     assert.ifError(err);
     var key = 'binarytest';
-    var booleanParams = [true, false, true]
+    var booleanParams = [true, false, true];
     con.execute('update CfBoolean set ?=? where key=?', booleanParams, function(updErr) {
       if (updErr) {
         con.close();
@@ -498,7 +500,7 @@ exports.testDate = function(test, assert) {
     assert.ifError(err);
     var key = 'binarytest';
       var now = new Date();
-      var dateParams = [now, now.getTime(), new Date(2021, 11, 11, 11, 11, 11, 111) ]
+      var dateParams = [now, now.getTime(), new Date(2021, 11, 11, 11, 11, 11, 111)];
     con.execute('update CfDate set ?=? where key=?', dateParams, function(updErr) {
       if (updErr) {
         con.close();
@@ -857,20 +859,64 @@ exports.testReversedString = function(test, assert) {
   });
 };
 
-
-exports.testUndefinedParam = function(test, assert) {
+exports.testConnectionBindError = function(test, assert) {
   connect(function(err, con) {
     if (err) {
       assert.ok(false);
       test.finish();
-    } else {
-      con.execute('UPDATE CfUtf8 SET ?=? WHERE KEY=?', [undefined, 'aaa', 'missing_col_0'], function(err) {
-        con.close();
+      return;
+    }
+
+    async.series([
+      function testUndefinedParameter(callback) {
+        con.execute('UPDATE CfUtf8 SET ?=? WHERE KEY=?', [undefined, 'aaa', 'missing_col_0'], function(err) {
+          assert.ok(err);
+          assert.strictEqual('null/undefined query parameter', err.message);
+          callback();
+        });
+      },
+
+      function testNullParameter(callback) {
+        con.execute('UPDATE CfUtf8 SET ?=? WHERE KEY=?', [null, 'aaa', 'missing_col_0'], function(err) {
+          assert.ok(err);
+          assert.strictEqual('null/undefined query parameter', err.message);
+          callback();
+        });
+      }
+    ],
+
+    function(err) {
+      con.close();
+      test.finish();
+    });
+  });
+};
+
+exports.testPooledConnectionBindError = function(test, assert) {
+  var hosts = ['127.0.0.1:9160'],
+      conn = new PooledConnection({'hosts': hosts, 'keyspace': 'Keyspace1', use_bigints: true});
+
+  async.series([
+    function testUndefinedParameter(callback) {
+      conn.execute('UPDATE CfUtf8 SET ?=? WHERE KEY=?', [undefined, 'aaa', 'missing_col_0'], function(err) {
         assert.ok(err);
         assert.strictEqual('null/undefined query parameter', err.message);
-        test.finish();
+        callback();
+      });
+    },
+
+    function testNullParameter(callback) {
+      conn.execute('UPDATE CfUtf8 SET ?=? WHERE KEY=?', [null, 'aaa', 'missing_col_0'], function(err) {
+        assert.ok(err);
+        assert.strictEqual('null/undefined query parameter', err.message);
+        callback();
       });
     }
+  ],
+
+  function(err) {
+    conn.shutdown();
+    test.finish();
   });
 };
 
@@ -1025,10 +1071,11 @@ exports.testPooledConnection = function(test, assert) {
     if (err) { bail(conn, err); }
 
     async.forEach(range, function (_, callback) {
-      conn.execute('SELECT A FROM CfUgly WHERE KEY=1', [], function(err, rows) {
+      conn.execute('SELECT A FROM CfUgly WHERE KEY=1', [], function(err, rows, metadata) {
         if (err) { bail(conn, err); }
         assert.strictEqual(rows.rowCount(), 1);
         var row = rows[0];
+        assert.ok(metadata.connectionInfo);
         assert.strictEqual(row.cols[0].name.toString(), 'A');
         callback();
       });
@@ -1128,35 +1175,29 @@ exports.testPooledConnectionLoad = function(test, assert) {
     function(cb) {
       conn.execute('TRUNCATE CfUtf8', [], cb);
     },
-    function(res, cb) {
-      var executes = [];
-      for (var i = 0; i < count; i++) {
-        (function(index) {
-          executes.push(function(parallelCb) {
-            conn.execute('UPDATE CfUtf8 SET ? = ? WHERE KEY = ?', [
-              'testCol',
-              'testVal',
-              'testKey'+index
-            ], parallelCb);
-          });
-        })(i);
-      }
-      async.parallel(executes, function(err) {
-        assert.ifError(err);
-        cb();
-      });
+    function(res, _, cb) {
+      var arr = util.makeRangeArray(count);
+      async.forEach(arr, function(index, callback) {
+        var args = [
+          'testCol',
+          'testVal',
+          'testKey' + index
+        ];
+
+        conn.execute('UPDATE CfUtf8 SET ? = ? WHERE KEY = ?', args, callback);
+      }, cb);
     },
     function(cb) {
       conn.execute('SELECT COUNT(*) FROM CfUtf8', [], cb);
     },
-    function(res, cb) {
+    function(res, metadata, cb) {
       assert.equal(res[0].colHash.count, count);
       cb();
     },
     function(cb) {
       conn.execute('TRUNCATE CfUtf8', [], cb);
     },
-    function(res, cb) {
+    function(res, _, cb) {
       conn.shutdown(cb);
     }
   ],
@@ -1175,16 +1216,17 @@ exports.testPooledConnectionShutdown = function(test, assert) {
 
   var expected = 100;
   var cbcount = 0;
+  var arr = util.makeRangeArray(expected);
   var spy = function(err, res) {
     assert.ifError(err);
     cbcount++;
   };
 
-  for (var i = 0; i < expected; i++) {
-    (function(index) {
-      conn.execute('UPDATE CfUtf8 SET ? = ? WHERE KEY = ?', ['col', 'val', 'key'+index], spy);
-    })(i);
-  }
+  async.forEach(arr, function(index, callback) {
+    conn.execute('UPDATE CfUtf8 SET ? = ? WHERE KEY = ?', ['col', 'val', 'key'+index], spy);
+    callback();
+  }, function() {});
+
   conn.shutdown(function(err) {
     assert.ifError(err);
     assert.equal(cbcount, expected);
@@ -1199,16 +1241,16 @@ exports.testPooledConnectionShutdownTwice = function(test, assert) {
 
   var expected = 100;
   var cbcount = 0;
+  var arr = util.makeRangeArray(expected);
   var spy = function(err, res) {
     assert.ifError(err);
     cbcount++;
   };
 
-  for (var i = 0; i < expected; i++) {
-    (function(index) {
-      conn.execute('UPDATE CfUtf8 SET ? = ? WHERE KEY = ?', ['col', 'val', 'key'+index], spy);
-    })(i);
-  }
+  async.forEach(arr, function(index, callback) {
+    conn.execute('UPDATE CfUtf8 SET ? = ? WHERE KEY = ?', ['col', 'val', 'key'+index], spy);
+    callback();
+  }, function() {});
 
   assert.ok(!conn.shuttingDown);
   conn.shutdown(function(err) {
@@ -1227,12 +1269,35 @@ exports.testPooledConnectionShutdownTwice = function(test, assert) {
   });
 };
 
+exports.testThriftConnectionErrorIsProperlyPropagated = function(test, assert) {
+  async.waterfall([
+    connect,
+
+    function executeQueryAndEmitMockError(con, callback) {
+      con.execute('SELECT ""."" FROM Keyspace1', [], function(err, res) {
+        assert.ok(err);
+        assert.equal(err.message, 'mock error');
+        callback(null, con);
+      });
+
+      con.con.emit('error', new Error('mock error'));
+    }
+  ],
+
+  function(err, con) {
+    if (con) {
+      con.close();
+    }
+
+    test.finish();
+  });
+};
 
 exports.testPooledContainerImmediateShutdown = function(test, assert) {
   var hosts = ['127.0.0.1:9160'];
   var pool = new PooledConnection({'hosts': hosts, 'keyspace': 'Keyspace1'});
 
-  pool.connect();
+  pool.connect(function () {});
   pool.shutdown(function(err) {
     assert.ifError(err);
     test.finish();
